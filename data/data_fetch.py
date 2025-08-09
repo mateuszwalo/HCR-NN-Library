@@ -6,6 +6,8 @@ To jest skrypt do wyciągania danych giełdowych.
 Aby go odaplić trzeba zmienić kod spółki giełdowej i przedziały czasowe.
 """
 
+__all__ = ['fetch_stock_data']
+
 def fetch_stock_data(kod:str = "OTGLF",
                      start:str = "2015-01-01",
                      end:str = "2025-01-01",
