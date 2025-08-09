@@ -1,5 +1,5 @@
 library(torch)
-library(torchvision) # For nnf_softmax (functional softmax)
+library(torchvision) # For softmax
 
 CDFNorm <- nn_module(
   classname = "CDFNorm",
