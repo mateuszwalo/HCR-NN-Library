@@ -21,9 +21,10 @@ class PolynomialBasis(nn.Module):
         device = u.device
         u_flat = u.reshape(-1)
         x = 2 * u_flat - 1  # map [0,1] -> [-1,1]
+        x_np = x.detach().cpu().numpy()
         out = []
         for i in range(self.degree + 1):
-            Pi_np = eval_legendre(i, x.cpu().numpy())
+            Pi_np = eval_legendre(i, x_np)
             Pi = torch.as_tensor(Pi_np, dtype=dtype, device=device)
             scale = torch.sqrt(torch.tensor(2 * i + 1, dtype=dtype, device=device))
             out.append(scale * Pi)
@@ -62,7 +63,12 @@ class KDEBasis(nn.Module):
 
     def __init__(self, centers: Tensor, bandwidth: float):
         super().__init__()
-        self.register_buffer('centers', centers.reshape(-1))
+        centers = centers.reshape(-1)
+        if centers.numel() == 0:
+            raise ValueError("centers must be non-empty")
+        if bandwidth <= 0:
+            raise ValueError("bandwidth must be > 0")
+        self.register_buffer('centers', centers)
         self.bandwidth = float(bandwidth)
 
     def forward(self, u: Tensor) -> Tensor:
@@ -80,8 +86,12 @@ class KDEBasis(nn.Module):
 def select_basis(name: str, degree: int, **kwargs) -> nn.Module:
     name = name.lower()
     if name == 'polynomial':
+        if degree is None:
+            raise ValueError("Polynomial basis requires 'degree'")
         return PolynomialBasis(degree)
     elif name == 'cosine':
+        if degree is None:
+            raise ValueError("Cosine basis requires 'degree'")
         return CosineBasis(degree)
     elif name == 'kde':
         centers = kwargs.get('centers')

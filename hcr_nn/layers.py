@@ -209,19 +209,24 @@ class PropagationEstimation(nn.Module):
         self.feature_fn = feature_fn
 
     def propagate_expectation(self):
-        fy = self.feature_fn(self.y).float().view(-1)
-        fz = self.feature_fn(self.z).float().view(-1)
+        # dopasowanie dtype/device do tensora a
+        target_dtype = self.a.dtype
+        target_device = self.a.device
+
+        fy = self.feature_fn(self.y).to(dtype=target_dtype, device=target_device).view(-1)
+        fz = self.feature_fn(self.z).to(dtype=target_dtype, device=target_device).view(-1)
 
         numerator = torch.einsum('jk,j,k->', self.a[1], fy, fz)
         denominator = torch.einsum('jk,j,k->', self.a[0], fy, fz)
 
         ratio = numerator / (denominator + 1e-8)
-        
-        #przesunięcie bazy
+
+        # przesunięcie bazy
         centered_ratio = ratio - 1.0
 
-        propagated = 0.5 + (1.0 / (2.0 * torch.sqrt(torch.tensor(3.0)))) * centered_ratio
-        
+        const = torch.sqrt(torch.tensor(3.0, dtype=ratio.dtype, device=ratio.device))
+        propagated = 0.5 + (1.0 / (2.0 * const)) * centered_ratio
+
         return propagated
     
 class EntropyAndMutualInformation(nn.Module):

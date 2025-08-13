@@ -1,0 +1,154 @@
+# tests/test_neuron.py
+import pytest
+import torch
+
+from hcr_nn.basis import PolynomialBasis, CosineBasis, KDEBasis
+from hcr_nn.neuron import HCRNeuron
+
+# PolynomialBasis depends on SciPy; we make it optional for environments without SciPy.
+try:
+    import scipy  # noqa: F401
+    HAS_SCIPY = True
+except Exception:
+    HAS_SCIPY = False
+
+
+def _make_basis(kind: str):
+    """
+    Small helper to construct a basis with a known feature dimension.
+    - cosine: degree=3 -> B=4
+    - polynomial: degree=3 -> B=4 (requires SciPy)
+    - kde: 5 centers -> B=5
+    """
+    kind = kind.lower()
+    if kind == "cosine":
+        return CosineBasis(degree=3), 4
+    elif kind == "polynomial":
+        if not HAS_SCIPY:
+            pytest.skip("SciPy is required for PolynomialBasis")
+        return PolynomialBasis(degree=3), 4
+    elif kind == "kde":
+        centers = torch.linspace(0, 1, 5)
+        return KDEBasis(centers=centers, bandwidth=0.1), centers.numel()
+    else:
+        raise ValueError(f"Unknown basis kind: {kind}")
+
+
+@pytest.mark.parametrize("basis_kind", ["cosine", "kde"] + (["polynomial"] if HAS_SCIPY else []))
+@pytest.mark.parametrize("shape", [(16,), (4, 5)])
+@pytest.mark.parametrize("out_features", [1, 3])
+def test_shapes_and_dtype(basis_kind, shape, out_features):
+    basis, B = _make_basis(basis_kind)
+    neuron = HCRNeuron(basis=basis, out_features=out_features, bias=True)
+
+    u = torch.rand(shape, dtype=torch.float32)
+    y = neuron(u)
+
+    assert y.shape == (*shape, out_features)
+    assert y.dtype == u.dtype
+    # sanity: basis_dim detected internally should match expectation
+    assert neuron.basis_dim == B
+
+
+@pytest.mark.parametrize("basis_kind", ["cosine"] + (["polynomial"] if HAS_SCIPY else []))
+def test_grad_flow_and_params_update(basis_kind):
+    basis, _ = _make_basis(basis_kind)
+    neuron = HCRNeuron(basis=basis, out_features=2, bias=True)
+
+    u = torch.linspace(0, 1, 17, dtype=torch.float64, requires_grad=True)
+    y = neuron(u)                     # (17, 2)
+    loss = y.sum()
+    loss.backward()
+
+    # Parameter grads should always exist
+    assert neuron.weight.grad is not None
+    assert torch.all(torch.isfinite(neuron.weight.grad))
+    assert neuron.bias is not None and neuron.bias.grad is not None
+
+    if basis_kind != "polynomial":
+        # Cosine/KDE: basis is differentiable w.r.t. u in torch
+        assert u.grad is not None
+        assert torch.all(torch.isfinite(u.grad))
+    else:
+        # PolynomialBasis uses SciPy -> detach() inside, so no grad w.r.t. u
+        assert u.grad is None or torch.all(torch.isfinite(u.grad))
+
+
+@pytest.mark.parametrize("basis_kind", ["cosine"])
+def test_no_bias_option(basis_kind):
+    basis, _ = _make_basis(basis_kind)
+    neuron = HCRNeuron(basis=basis, out_features=3, bias=False)
+    assert neuron.bias is None
+
+    u = torch.rand(10)
+    y = neuron(u)
+    assert y.shape == (10, 3)  # still correct shape without bias
+
+
+@pytest.mark.parametrize("basis_kind", ["cosine"] + (["polynomial"] if HAS_SCIPY else []))
+def test_manual_linear_equivalence(basis_kind):
+    """
+    With manually set weight/bias, HCRNeuron output must equal
+    Y = F(u) @ W^T + b for all samples.
+    """
+    basis, B = _make_basis(basis_kind)
+    out_features = 2
+    neuron = HCRNeuron(basis=basis, out_features=out_features, bias=True)
+
+    # Set deterministic parameters
+    with torch.no_grad():
+        W = torch.arange(out_features * B, dtype=torch.float64).reshape(out_features, B) / 10.0
+        b = torch.tensor([0.3, -0.2], dtype=torch.float64)
+        neuron.weight.copy_(W.to(neuron.weight.dtype))
+        neuron.bias.copy_(b.to(neuron.bias.dtype))
+
+    # Build inputs and compute reference
+    u = torch.linspace(0, 1, 13, dtype=torch.float64)
+    F = basis(u).to(dtype=torch.float64)              # (13, B)
+    Y_ref = F @ W.T + b                               # (13, 2)
+
+    Y = neuron(u.to(dtype=torch.float64)).to(torch.float64)
+    assert torch.allclose(Y, Y_ref, rtol=1e-6, atol=1e-6)
+
+
+@pytest.mark.parametrize("basis_kind", ["cosine"])
+def test_determinism_given_fixed_params(basis_kind):
+    """
+    For fixed parameters and same input, outputs must be identical.
+    """
+    basis, _ = _make_basis(basis_kind)
+    neuron = HCRNeuron(basis=basis, out_features=2, bias=True)
+
+    # Freeze parameters to known values
+    with torch.no_grad():
+        neuron.weight.fill_(0.123)
+        if neuron.bias is not None:
+            neuron.bias.fill_(-0.5)
+
+    u = torch.rand(7)
+    y1 = neuron(u)
+    y2 = neuron(u.clone())
+    assert torch.allclose(y1, y2, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("basis_kind", ["cosine"])
+def test_device_movement_cpu_only(basis_kind):
+    """
+    Basic device consistency: moving the module should keep outputs on that device.
+    (CPU-only here; you can add a CUDA variant if available.)
+    """
+    basis, _ = _make_basis(basis_kind)
+    neuron = HCRNeuron(basis=basis, out_features=2, bias=True).to("cpu")
+    u = torch.rand(5)
+    y = neuron(u)
+    assert y.device.type == "cpu"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_device_movement_cuda():
+    basis = CosineBasis(degree=3).to("cuda")
+    neuron = HCRNeuron(basis=basis, out_features=2, bias=True).to("cuda")
+    u = torch.rand(11, device="cuda")
+    y = neuron(u)
+    assert y.device.type == "cuda"
+    assert neuron.weight.device.type == "cuda"
