@@ -15,7 +15,7 @@ from typing import Optional, Callable
 import torch
 import torch.nn as nn
 from torch import Tensor
-from finished_files_python.basis import select_basis
+from hcr_nn.basis import select_basis
 
 
 class HCRCond2D(nn.Module):
