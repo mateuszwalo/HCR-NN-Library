@@ -1,2 +1,4 @@
 extra/
 /__pycache__/*
+extra/
+C_kernels/
