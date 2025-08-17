@@ -52,10 +52,40 @@ __global__ void context_kernel(
     }
 }
 
-void denominator_cuda() {
+torch::Tensor conditional_estimation_cuda(
+    torch::Tensor x_candidates, // (N, D)
+    torch::Tensor fy,           // (D,)
+    torch::Tensor fz,           // (D,)
+    torch::Tensor a             // (D, D, D)
+) {
+    int N = x_candidates.size(0);
+    int D = fy.size(0);
 
-}
+    auto denom = torch::zeros({1}, fy.options());
+    auto context = torch::zeros({D}, fy.options());
+    auto scores = torch::zeros({N}, fy.options());
 
-void context_cuda() {
+    // Launch denominator kernel
+    dim3 threads1(16, 16);
+    dim3 blocks1((D + 15)/16, (D + 15)/16);
+    denominator_kernel<<<blocks1, threads1>>>(
+        a.data_ptr<float>(), fy.data_ptr<float>(), fz.data_ptr<float>(),
+        denom.data_ptr<float>(), D
+    );
 
+    // Launch context kernel
+    dim3 threads2(D, D);
+    dim3 blocks2(D);
+    context_kernel<<<blocks2, threads2>>>(
+        a.data_ptr<float>(), fy.data_ptr<float>(), fz.data_ptr<float>(),
+        context.data_ptr<float>(), D
+    );
+
+    // Normalize context by denominator
+    context /= denom + 1e-8;
+
+    // Compute scores = X @ context
+    scores = torch::matmul(x_candidates, context);
+
+    return scores;
 }

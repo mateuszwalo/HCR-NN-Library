@@ -1,6 +1,7 @@
 #include <torch/extension.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <vector>
 
 // CUDA kernel: each thread computes one element A[i,j,k]
 __global__ void mean_estimation_kernel(

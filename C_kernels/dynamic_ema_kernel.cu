@@ -25,6 +25,28 @@ __global__ void ema_update_kernel(
     a[idx] = (1.0f - ema_lambda) * old_val + ema_lambda * update_val;
 }
 
-void ema_update_cuda() {
 
+torch::Tensor ema_update_cuda(
+    torch::Tensor a,   // (D,D,D)
+    torch::Tensor x,   // (D,)
+    torch::Tensor y,   // (D,)
+    torch::Tensor z,   // (D,)
+    float ema_lambda
+) {
+    int D = x.size(0);
+    int total = D * D * D;
+
+    const int threads = 256;
+    const int blocks = (total + threads - 1) / threads;
+
+    ema_update_kernel<<<blocks, threads>>>(
+        x.data_ptr<float>(),
+        y.data_ptr<float>(),
+        z.data_ptr<float>(),
+        a.data_ptr<float>(),
+        ema_lambda,
+        D
+    );
+
+    return a;
 }

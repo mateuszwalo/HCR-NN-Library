@@ -66,10 +66,34 @@ __global__ void mi_kernel(
     mi_out[b] = sum_sq_x * sum_sq_y;
 }
 
-void entropy_cuda() {
 
+torch::Tensor approximate_entropy_cuda(torch::Tensor activations) {
+    int B = activations.size(0);
+    int D = activations.size(1);
+
+    auto entropy_out = torch::zeros({B}, activations.options());
+
+    entropy_kernel<<<B, 1>>>(
+        activations.data_ptr<float>(),
+        entropy_out.data_ptr<float>(),
+        B, D
+    );
+
+    return entropy_out.mean();
 }
 
-void mi_cuda() {
+torch::Tensor approximate_mi_cuda(torch::Tensor actX, torch::Tensor actY) {
+    int B = actX.size(0);
+    int D = actX.size(1);
 
+    auto mi_out = torch::zeros({B}, actX.options());
+
+    mi_kernel<<<B, 1>>>(
+        actX.data_ptr<float>(),
+        actY.data_ptr<float>(),
+        mi_out.data_ptr<float>(),
+        B, D
+    );
+
+    return mi_out.mean();
 }

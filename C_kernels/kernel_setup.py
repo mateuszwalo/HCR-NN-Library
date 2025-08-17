@@ -2,7 +2,7 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 setup(
-    name="mean_estimation",
+    name="layers_kernels",
     ext_modules=[
         CUDAExtension(
             name="layers_kernels",
@@ -12,6 +12,7 @@ setup(
                      "propagation_estimation_kernel.cu",
                      "dynamic_ema_kernel.cu",
                      "entropy_mi_kernel.cu",
+                     "base_optimization.cu"
                      ],
         )
     ],
