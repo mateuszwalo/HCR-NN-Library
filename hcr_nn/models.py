@@ -114,7 +114,7 @@ class HCRCond2D(nn.Module):
 
         # ρ_b(g) = Σ_{i,j} f2_b[j] * a_{ij} * f1g_g[i]
         # einsum: 'bd,ij,gd->bg'
-        rho = torch.einsum('bd,ij,gd->bg', f2, self.coeffs, f1g)
+        rho = torch.einsum('gi,ij,bj->bg', f1g, self.coeffs, f2)
 
         # clamp and normalize along grid
         rho = torch.clamp(rho, min=self.eps)          # (B,G)
