@@ -1,40 +1,90 @@
 # HCR-NN Library
 
-Repository for contributors from **AIntern** co-developing the HCR-NN library.
+![Python version](https://img.shields.io/badge/python-3.9%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## Introduction
+A professional, modular Python library for **Hierarchical Correlation Reconstruction with Neural Networks (HCR-NN)**.
 
-The **HCR-NN Library** is a Python package that provides a practical and automated implementation of the **Hierarchical Correlation Reconstruction (HCR)** model.  
-It combines statistical modeling with neural network components to enable efficient density estimation, conditional probability computation, and advanced multivariate data analysis.  
+---
 
-The library is designed for researchers, data scientists, and engineers who require precise probabilistic modeling tools with flexible architecture for experimentation and real-world applications.
+##  What Is HCR-NN?
 
-## Authors & Contributors
+HCR-NN enables efficient density estimation and conditional inference on multivariate data using principled statistical modeling wrapped in modern neural network constructs. It is designed for both research and application:
 
-- Mateusz Walo
-- Felicja Warno
-- Adrian Przybysz
-- Karol Rochalski
-- Zuzanna Sieńko
+- Model **joint and conditional densities**, e.g., \(ρ(u_1, u_2)\) and \(E[u_1\mid u_2]\).  
+- Normalize raw data using empirical or Gaussian CDFs (`CDFNorm`).  
+- Approximate densities via **basis expansions** (polynomial, cosine, KDE).  
+- Build, train, and visualize **conditional models** with `HCRCond2D`.  
+- Integrate with aurhus-propositional modeling workflows & PyTorch pipelines.
 
-## Features
+---
 
-- 📊 Estimation of **probability density functions** and **conditional densities**  
-- 🔗 Modeling dependencies between variables using **HCR**  
-- 🧠 Neural network-based architecture for enhanced statistical analysis  
-- ⚡ Extendable design for custom modeling workflows  
+## ​ Highlights
 
-## Installation
+- **Precise probabilistic modeling** with neural network flexibility.  
+- **Modular design**: swap between normalization, basis, model easily.  
+- **Reproducible example notebooks** (`examples/`) that run in CI and output artifacts.  
+- **Optimized density utilities** for direct density inference and conditional expectation.
 
-Requirements:
-- Python 3.9+
-- PyTorch
-- NumPy
-- pytest
+---
 
-Install dependencies:
-pip install requirements.txt
+<!-- ##  Quick Start
 
-## Running Tests
+```bash
+git clone https://github.com/mateuszwalo/HCR-NN-Library.git
+cd HCR-NN-Library
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt  # includes torch, numpy, pandas, pytest, etc.
+``` -->
 
-pytest tests/ -v
+## Example Workflow: Train and Visualize
+
+```bash
+jupyter notebook example_implementation/01_hcrnn_end_to_end.ipynb
+```
+
+This notebook demonstrates loading data, normalization, training HCRCond2D, and visualizing 𝐸[𝑢1∣𝑢2]E[u1∣u2].
+
+## Documentation
+
+Getting started & API reference: see docs/guide.md.
+
+In-code documentation: each module in hcr_nn/ is documented via docstrings.
+
+Further reading: the foundational theory is detailed in [the HCR‑NN paper (arXiv:2405.05097)].
+
+## License
+
+This project is available under the MIT License. See LICENSE for details.
+
+## Acknowledgments
+
+Developed by contributors from AIntern:
+
+****Mateusz Walo****
+
+****Felicja Warno****
+
+****Adrian Przybysz****
+
+****Karol Rochalski****
+
+****Zuzanna Sieńko****
+
+****Under the supervision of PhD Jarek Duda author HCR-NN theory****
+
+Inspired by HCR Theory: Refer to the original paper (arXiv:2405.05097) for theoretical foundations (normalization, orthonormal basis, propagation).
+
+
+## Contributing
+
+We welcome contributions of any kind:
+
+Fork the repo and create a branch for your feature or fix.
+
+Add clear documentation and tests (preferably notebooks or pytest) — all examples should run in CI.
+
+Open a Pull Request with a clear description of your changes.
+
+Check the test suite `pytest -q` in CI for regression safety.
