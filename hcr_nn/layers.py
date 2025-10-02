@@ -313,4 +313,5 @@ class InformationBottleneck(nn.Module):
         I_TY = self(T_features, Y_features)
         return I_XT - self.beta * I_TY
     
-    
+def hcr_nn_info():
+    print('The package implementation for Hierarchical Correlation Reconstruction')
