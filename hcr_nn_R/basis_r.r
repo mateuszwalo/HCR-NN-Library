@@ -1,14 +1,11 @@
 library(torch)
 
 # --- PolynomialBasis --------------------------------------------------------
-# Shifted–Legendre orthonormal basis on [0,1]:
-#   f_i(u) = sqrt(2*i+1) * P_i(2u-1)
-# where P_i is the standard Legendre polynomial on [-1,1].
-PolynomialBasis <- nn_module(
-  "PolynomialBasis",
+PolynomialBasis <- PolynomialBasis(
   initialize = function(degree) {
     self$degree <- degree
   },
+
   forward = function(u) {
     dtype <- u$dtype
     device <- u$device
@@ -24,15 +21,13 @@ PolynomialBasis <- nn_module(
       scale <- torch_sqrt(torch_tensor(2 * i + 1, dtype = dtype, device = device))
       out_list[[length(out_list) + 1]] <- scale * Pi
     }
+    
     F <- torch_stack(out_list, dim = -1)
     F$reshape(c(u$shape, self$degree + 1))
   }
 )
 
 # --- CosineBasis ------------------------------------------------------------
-# Orthonormal cosine basis on [0,1]:
-#   f_0(u)=1
-#   f_j(u)=sqrt(2) * cos(j*pi*u) for j>0
 CosineBasis <- nn_module(
   "CosineBasis",
   initialize = function(degree) {

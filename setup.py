@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
-with open('./README.md', 'r') as f:
+with open('README.md', 'r+') as f:
     description = f.read()
 
 setup(
     name='hcr_nn',
-    version='1.0.0',
+    version='1.0.1',
     packages=find_packages(),
     install_requires=[
         'numpy>=1.26.4',
