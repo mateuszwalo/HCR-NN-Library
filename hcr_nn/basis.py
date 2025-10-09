@@ -84,6 +84,9 @@ class KDEBasis(nn.Module):
 
 
 def select_basis(name: str, degree: int, **kwargs) -> nn.Module:
+    """
+    Select basis from among polynomial, cosine and kde.
+    """
     name = name.lower()
     if name == 'polynomial':
         if degree is None:

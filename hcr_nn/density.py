@@ -5,6 +5,9 @@ from torch import Tensor
 
 
 def clamp_density(rho: Tensor, eps: float = 1e-6) -> Tensor:
+    """
+    Clamp density of Tensor.
+    """
     return torch.clamp(rho, min=eps)
 
 
@@ -12,6 +15,9 @@ def joint_density(u: Tensor,
                   coeffs: Tensor,
                   basis_vals: Tensor) -> Tensor:
     # for 2D HCR: basis_vals shape (...,2,deg+1)
+    """
+    Model joint distribution.
+    """
     return torch.einsum('...i,ij,...j->...',
                         basis_vals[..., 0, :],
                         coeffs,
@@ -24,6 +30,9 @@ def conditional_density(u1_grid: Tensor,
                         basis: torch.nn.Module,
                         deg: int,
                         eps: float = 1e-6) -> Tensor:
+    """
+    Calculate conidtional density.
+    """
     dtype = u1_grid.dtype
     device = u1_grid.device
 
@@ -50,6 +59,9 @@ def expected_u1_given_u2(u2_scalar: float,
                         deg: int,
                         grid_size: int = 200,
                         eps: float = 1e-6) -> float:
+    """
+    Determine expected u1 form given u2.
+    """
     dtype = coeffs.dtype
     device = coeffs.device
     u1_grid = torch.linspace(0, 1, grid_size, dtype=dtype, device=device)

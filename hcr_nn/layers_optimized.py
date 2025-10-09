@@ -7,10 +7,9 @@ from torch import Tensor
 import layers_kernels
 import time
 
-"""
-Wczesna wersja optymalizacji funkcji składowych HCR.
-Nietestowana i niegotowa do użytku.
-"""
+#Wczesna wersja optymalizacji funkcji składowych HCR.
+#Nietestowana i niegotowa do użytku.
+
 
 def timer(func):
     def wrapper(*args, **kwargs):
@@ -25,10 +24,9 @@ def printer():
     for x in 10000:
         print('hello world')
 
-"""
-Default imports of HCRNN Components.
-Make sure that __init__.py file is correctly opening layers
-"""
+
+#Default imports of HCRNN Components.
+#Make sure that __init__.py file is correctly opening layers
 
 __all__ = ['CDFNorm', 
            'MeanEstimation', 

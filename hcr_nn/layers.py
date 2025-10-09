@@ -20,8 +20,7 @@ __all__ = ['CDFNorm',
            'InformationBottleneck']
 
 class CDFNorm(nn.Module):
-    def __init__(self, method='gaussian', unbiased=True, eps=1e-5, affine=False, track_running_stats=True):
-        """
+    """
         Normalizacja CDF (dystrybuanty).
 
         Parametry:
@@ -30,7 +29,8 @@ class CDFNorm(nn.Module):
             eps: mała wartość dla stabilności numerycznej
             affine: czy zastosować transformację afiniczną
             track_running_stats: czy śledzić statystyki podczas uczenia
-        """
+    """
+    def __init__(self, method='gaussian', unbiased=True, eps=1e-5, affine=False, track_running_stats=True):
         super().__init__()
         self.method = method
         self.unbiased = unbiased
@@ -121,6 +121,9 @@ class CDFNorm(nn.Module):
             raise ValueError(f"Niewspierana metoda normalizacji: {self.method}")
         
 class MeanEstimation(nn.Module):
+    """
+    Calculate mean estimation for a tensor.
+    """
     def __init__(self,
                  *,
                  triplets,
@@ -154,6 +157,9 @@ class MeanEstimation(nn.Module):
         return a
     
 class ConditionalEstimation(nn.Module):
+    """
+    Calculate estimation based on condition.
+    """
     def __init__(self,
                  *,
                  x_candidates,
@@ -196,6 +202,9 @@ class ConditionalEstimation(nn.Module):
         return scores
     
 class PropagationEstimation(nn.Module):
+    """
+    estimate Propagation of Tensor.
+    """
     def __init__(self,
                  *,
                  y,
@@ -230,7 +239,10 @@ class PropagationEstimation(nn.Module):
         return propagated
     
 class EntropyAndMutualInformation(nn.Module):
-
+    """
+    Calcuate entropy and/or mutual information. 
+    Two methods are specifically set in the same class.
+    """
     def approximate_entropy(self, activations):
 
         # Normalizacja prawdopodobieństw funkcji aktywacji
@@ -250,6 +262,9 @@ class EntropyAndMutualInformation(nn.Module):
         return mi
     
 class DynamicEMA(nn.Module):
+    """
+    Calculate Dynamic Exponential Moving Average for a Tensor.
+    """
     def __init__(self, x, y, z, ema_lambda) -> None:
         super().__init__()
         self.x = x
@@ -270,6 +285,9 @@ class DynamicEMA(nn.Module):
         return self.a
     
 class BaseOptimization(nn.Module):
+    """
+    Optimize the base of tensor.
+    """
     def __init__(self,
                  *,
                  a, #tensor do optymalizacji
@@ -297,6 +315,9 @@ class BaseOptimization(nn.Module):
         return new_a
     
 class InformationBottleneck(nn.Module):
+    """
+    Calculate information bottleneck.
+    """
     def __init__(self, beta=1.0):
         super().__init__()
         self.beta = beta
@@ -314,4 +335,7 @@ class InformationBottleneck(nn.Module):
         return I_XT - self.beta * I_TY
     
 def hcr_nn_info():
+    """
+    Print information about the package.
+    """
     print('The package implementation for Hierarchical Correlation Reconstruction')
