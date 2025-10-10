@@ -6,6 +6,7 @@
 A professional, modular Python library for **Hierarchical Correlation Reconstruction with Neural Networks (HCR-NN)**.
 
 Recent PyPI release: https://pypi.org/project/hcr-nn/
+
 Official GitHub repository: https://github.com/mateuszwalo/HCR-NN-Library
 
 ---
