@@ -5,7 +5,7 @@ with open('README.md', 'r+', encoding="utf8") as f:
 
 setup(
     name='hcr_nn',
-    version='1.0.3',
+    version='1.0.4',
     description='Package implementing Hierarchical Correlation Reconstruction Methodologies',
     packages=find_packages(),
     #setup_requires=['pytest-runner', 'flake8'],
