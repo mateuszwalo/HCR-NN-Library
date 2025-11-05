@@ -1,7 +1,7 @@
 extra/
 /__pycache__/*
 extra/
-C_kernels/
+#C_kernels/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
