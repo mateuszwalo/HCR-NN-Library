@@ -33,8 +33,7 @@ def context_kernel(a, fy, fz, context, D):
                 s += partial[jj, kk]
         context[i] = s
 
-def conditional_estimation(x_candidates, fy, fz, a):
-
+def conditional_estimation(x_candidates, fy, fz, a, return_context=False):
     x_candidates = np.ascontiguousarray(x_candidates.astype(np.float32))
     fy = np.ascontiguousarray(fy.astype(np.float32))
     fz = np.ascontiguousarray(fz.astype(np.float32))
@@ -44,7 +43,6 @@ def conditional_estimation(x_candidates, fy, fz, a):
 
     denom = np.zeros(1, dtype=np.float32)
     context = np.zeros(D, dtype=np.float32)
-    scores = np.zeros(N, dtype=np.float32)
 
     da = cuda.to_device(a)
     dfy = cuda.to_device(fy)
@@ -63,21 +61,13 @@ def conditional_estimation(x_candidates, fy, fz, a):
     cuda.synchronize()
 
     denom = ddenom.copy_to_host()[0]
-    context = dcontext.copy_to_host()
+    context = dcontext.copy_to_host().reshape(-1)
     context = context / (denom + 1e-8)
 
-    scores = x_candidates @ context  # same as torch.matmul
+    scores = x_candidates @ context  # (N, D) @ (D,) -> (N,)
 
-    return scores
+    if return_context:
+        return scores, context
+    else:
+        return scores
 
-
-if __name__ == "__main__":
-    D = 4
-    N = 5
-    x_candidates = np.random.rand(N, D).astype(np.float32)
-    fy = np.random.rand(D).astype(np.float32)
-    fz = np.random.rand(D).astype(np.float32)
-    a = np.random.rand(D, D, D).astype(np.float32)
-
-    scores = conditional_estimation(x_candidates, fy, fz, a)
-    print("scores:", scores)

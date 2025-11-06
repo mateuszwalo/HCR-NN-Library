@@ -33,15 +33,3 @@ def transform_tensor(U, a):
 
     new_a = dnew_a.copy_to_host()
     return new_a
-
-
-# Example test, remove after testing is done
-if __name__ == "__main__":
-    D = 4
-    U = np.random.rand(D, D).astype(np.float32)
-    a = np.random.rand(D, D, D).astype(np.float32)
-
-    new_a = transform_tensor(U, a)
-
-    ref = np.einsum('li, ljk -> ijk', U.T, a)
-    print("max abs error:", np.max(np.abs(new_a - ref)))

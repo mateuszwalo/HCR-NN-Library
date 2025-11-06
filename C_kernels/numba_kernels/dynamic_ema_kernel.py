@@ -1,5 +1,7 @@
+import torch
 import numpy as np
 from numba import cuda, float32
+import torch.nn as nn
 
 @cuda.jit
 def ema_update_kernel(x, y, z, a, ema_lambda, D):
@@ -17,8 +19,8 @@ def ema_update_kernel(x, y, z, a, ema_lambda, D):
     old_val = a[i, j, k]
     a[i, j, k] = (1.0 - ema_lambda) * old_val + ema_lambda * update_val
 
-def ema_update(a, x, y, z, ema_lambda):
 
+def ema_update(a, x, y, z, ema_lambda):
     a = np.ascontiguousarray(a.astype(np.float32))
     x = np.ascontiguousarray(x.astype(np.float32))
     y = np.ascontiguousarray(y.astype(np.float32))
@@ -39,18 +41,3 @@ def ema_update(a, x, y, z, ema_lambda):
     cuda.synchronize()
 
     return d_a.copy_to_host()
-
-
-if __name__ == "__main__":
-    D = 4
-    ema_lambda = 0.1
-
-    a = np.random.rand(D, D, D).astype(np.float32)
-    x = np.random.rand(D).astype(np.float32)
-    y = np.random.rand(D).astype(np.float32)
-    z = np.random.rand(D).astype(np.float32)
-
-    new_a = ema_update(a, x, y, z, ema_lambda)
-
-    ref = (1 - ema_lambda) * a + ema_lambda * np.einsum('i,j,k->ijk', x, y, z)
-    print("max abs error:", np.max(np.abs(new_a - ref)))

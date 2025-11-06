@@ -1,6 +1,7 @@
 import numpy as np
 from numba import cuda, float32
 import math
+import torch
 
 @cuda.jit
 def bilinear_kernel(a0, a1, fy, fz, denom, num, D):
@@ -13,6 +14,12 @@ def bilinear_kernel(a0, a1, fy, fz, denom, num, D):
         cuda.atomic.add(num,   0, a1[j, k] * val_yz)
 
 def propagate_expectation(a, fy, fz):
+    if isinstance(a, torch.Tensor):
+        a = a.detach().cpu().numpy()
+    if isinstance(fy, torch.Tensor):
+        fy = fy.detach().cpu().numpy()
+    if isinstance(fz, torch.Tensor):
+        fz = fz.detach().cpu().numpy()
 
     a = np.ascontiguousarray(a.astype(np.float32))
     fy = np.ascontiguousarray(fy.astype(np.float32))
@@ -20,8 +27,8 @@ def propagate_expectation(a, fy, fz):
 
     D = fy.shape[0]
 
-    a0 = a[0]
-    a1 = a[1]
+    a0 = a[0].reshape(D, D)
+    a1 = a[1].reshape(D, D)
 
     denom = np.zeros(1, dtype=np.float32)
     num = np.zeros(1, dtype=np.float32)
@@ -47,12 +54,3 @@ def propagate_expectation(a, fy, fz):
     propagated = 0.5 + (0.5 / const_val) * (ratio - 1.0)
 
     return np.float32(propagated)
-
-if __name__ == "__main__":
-    D = 8
-    a = np.random.rand(2, D, D).astype(np.float32)
-    fy = np.random.rand(D).astype(np.float32)
-    fz = np.random.rand(D).astype(np.float32)
-
-    val = propagate_expectation(a, fy, fz)
-    print("Propagated value:", val)

@@ -4,12 +4,12 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-import layers_kernels
 import time
+import layers_kernel
+
 
 #Wczesna wersja optymalizacji funkcji składowych HCR.
 #Nietestowana i niegotowa do użytku.
-
 
 def timer(func):
     def wrapper(*args, **kwargs):
@@ -176,10 +176,13 @@ class MeanEstimation(nn.Module):
         fz = torch.stack(fz_list).to(device)
 
         # Run CUDA kernel
-        a = layers_kernels.mean_estimation_cu(fx, fy, fz, D)
-
+        a = layers_kernel.mean_estimation(
+            fx.detach().cpu().numpy(),
+            fy.detach().cpu().numpy(),
+            fz.detach().cpu().numpy()
+        )
         return a
-    
+ 
 class ConditionalEstimation(nn.Module):
     def __init__(self,
                  *,
@@ -199,29 +202,35 @@ class ConditionalEstimation(nn.Module):
 
         target_dtype = self.a.dtype
         target_device = self.a.device
-
+    
         fy = self.feature_fn(self.y).to(dtype=target_dtype, device=target_device).view(-1)
         fz = self.feature_fn(self.z).to(dtype=target_dtype, device=target_device).view(-1)
-
-        # denominator: use slice A[0]
-        denominator = layers_kernels.conditional_estimation_cu(
-            self.a[0:1].contiguous(), fy, fz
-        )[0]
-
-        # all i-scores at once with CUDA
-        context_sums = layers_kernels.conditional_estimation_cu(
-            self.a.contiguous(), fy, fz
-        )  # shape [I]
-
+    
+        # Move to NumPy for CUDA
+        fy_np = fy.cpu().numpy()
+        fz_np = fz.cpu().numpy()
+        a_np = self.a.cpu().numpy()
+        a0_np = self.a[0:1].cpu().numpy()
+        D = fy_np.shape[0]
+    
+        # Dummy x for shape
+        dummy_x = np.zeros((1, D), dtype=np.float32)
+    
+        # Get denom and context
+        _, context_np = layers_kernel.conditional_estimation(dummy_x, fy_np, fz_np, a_np, return_context=True)
+    
+        # Convert to tensor
+        context_tensor = torch.tensor(context_np, dtype=target_dtype, device=target_device)
+    
+        # Compute conditional scores
         scores = []
         for x in self.x_candidates:
             fx = self.feature_fn(x).to(dtype=target_dtype, device=target_device).view(-1)
-            # weighted dot product
-            score = torch.dot(fx, context_sums / (denominator + 1e-8))
+            score = torch.dot(fx, context_tensor)
             scores.append(score)
-
-        return scores
     
+        return scores
+  
 class PropagationEstimation(nn.Module):
     def __init__(self,
                  *,
@@ -242,9 +251,8 @@ class PropagationEstimation(nn.Module):
         fy = self.feature_fn(self.y).to(dtype=target_dtype, device=target_device).view(-1)
         fz = self.feature_fn(self.z).to(dtype=target_dtype, device=target_device).view(-1)
 
-        # Use CUDA kernel instead of einsum
-        numerator   = layers_kernels.propagate_expectation_cu(self.a[1].contiguous(), fy, fz)
-        denominator = layers_kernels.propagate_expectation_cu(self.a[0].contiguous(), fy, fz)
+        numerator   = layers_kernel.propagate_expectation(self.a[1].contiguous(), fy, fz)
+        denominator = layers_kernel.propagate_expectation(self.a[0].contiguous(), fy, fz)
 
         ratio = numerator / (denominator + 1e-8)
 
@@ -259,13 +267,13 @@ class EntropyAndMutualInformation(nn.Module):
     def approximate_entropy(self, activations):
         probs = F.softmax(activations, dim=1)
 
-        return layers_kernels.approximate_entropy_cu(probs)
+        return layers_kernel.approximate_entropy_cu(probs)
 
     def approximate_mutual_information(self, act_X, act_Y):
         probs_X = F.softmax(act_X, dim=1)
         probs_Y = F.softmax(act_Y, dim=1)
     
-        return layers_kernels.approximate_mi_cu(probs_X, probs_Y)
+        return layers_kernel.approximate_mi_cu(probs_X, probs_Y)
     
 class DynamicEMA(nn.Module):
     def __init__(self, x, y, z, ema_lambda) -> None:
@@ -274,30 +282,34 @@ class DynamicEMA(nn.Module):
         self.y = y
         self.z = z
         self.ema_lambda = ema_lambda
-        self.a = torch.zeros((len(x), len(y), len(z)), device=x.device, dtype=x.dtype)  # pusty tensor o rozmiarze sumy einstein'a
+        self.a = torch.zeros((len(x), len(y), len(z)), device=x.device, dtype=x.dtype)
 
     def EMAUpdateMethod(self):
-        self.a = layers_kernels.ema_update_cu(self.x, self.y, self.z, self.a, self.ema_lambda)
+        a_np = self.a.detach().cpu().numpy()
+        x_np = self.x.detach().cpu().numpy()
+        y_np = self.y.detach().cpu().numpy()
+        z_np = self.z.detach().cpu().numpy()
+
+        updated = layers_kernel.ema_update(a_np, x_np, y_np, z_np, float(self.ema_lambda))
+        self.a = torch.tensor(updated, device=self.x.device, dtype=self.x.dtype)
         return self.a
         
 class BaseOptimization(nn.Module):
-    def __init__(self,
-                 *,
-                 a, #tensor do optymalizacji
-                 ) -> None:
-        self. a = a
+    def __init__(self, *, a: Tensor):
+        super().__init__()
+        self.a = a
 
     def optimization_early(self) -> Tensor:
         M = self.a.reshape(len(self.a[0]), -1)
-
-        # Obliczenie SVD
         U, S, Vh = torch.linalg.svd(M, full_matrices=False)
 
-        # Step 4: Transformacja Tensora
-        new_a = layers_kernels.base_optimization_cu(U.T.contiguous(), self.a.contiguous())
+        new_a = layers_kernel.transform_tensor(
+            U.T.contiguous().cpu().numpy(),
+            self.a.cpu().numpy()
+        )
 
-        return new_a
-    
+        return torch.tensor(new_a, dtype=self.a.dtype, device=self.a.device)
+
 class InformationBottleneck(nn.Module):
     def __init__(self, beta=1.0):
         super().__init__()
@@ -319,5 +331,3 @@ class InformationBottleneck(nn.Module):
         I_XT = self(X_features, T_features)
         I_TY = self(T_features, Y_features)
         return I_XT - self.beta * I_TY
-    
-    

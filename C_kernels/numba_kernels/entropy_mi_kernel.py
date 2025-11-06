@@ -1,6 +1,6 @@
 import numpy as np
 from numba import cuda, float32
-import math
+import math, torch
 
 @cuda.jit
 def entropy_kernel(activations, entropy_out, B, D):
@@ -63,6 +63,9 @@ def mi_kernel(actX, actY, mi_out, B, D):
 
 def approximate_entropy(activations):
 
+    if isinstance(activations, torch.Tensor):
+        activations = activations.detach().cpu().numpy()
+
     activations = np.ascontiguousarray(activations.astype(np.float32))
     B, D = activations.shape
     entropy_out = np.zeros(B, dtype=np.float32)
@@ -74,13 +77,19 @@ def approximate_entropy(activations):
     cuda.synchronize()
 
     entropy_out = d_entropy.copy_to_host()
-    return np.mean(entropy_out)
+    return float(np.mean(entropy_out))
 
 
 def approximate_mi(actX, actY):
 
+    if isinstance(actX, torch.Tensor):
+        actX = actX.detach().cpu().numpy()
+    if isinstance(actY, torch.Tensor):
+        actY = actY.detach().cpu().numpy()
+
     actX = np.ascontiguousarray(actX.astype(np.float32))
     actY = np.ascontiguousarray(actY.astype(np.float32))
+
     B, D = actX.shape
     mi_out = np.zeros(B, dtype=np.float32)
 
@@ -92,17 +101,4 @@ def approximate_mi(actX, actY):
     cuda.synchronize()
 
     mi_out = d_mi.copy_to_host()
-    return np.mean(mi_out)
-
-
-if __name__ == "__main__":
-    B, D = 8, 4
-    activations = np.random.randn(B, D).astype(np.float32)
-    actX = np.random.randn(B, D).astype(np.float32)
-    actY = np.random.randn(B, D).astype(np.float32)
-
-    entropy_val = approximate_entropy(activations)
-    mi_val = approximate_mi(actX, actY)
-
-    print("Approximate entropy:", entropy_val)
-    print("Approximate MI:", mi_val)
+    return float(np.mean(mi_out))

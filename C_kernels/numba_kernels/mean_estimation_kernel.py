@@ -21,13 +21,13 @@ def mean_estimation_kernel(fx, fy, fz, out, D, N):
 
     out[i, j, k] = sum_val / N
 
-def mean_estimation(fx, fy, fz):
+def mean_estimation(fx, fy, fz, D=None):
 
     fx = np.ascontiguousarray(fx.astype(np.float32))
     fy = np.ascontiguousarray(fy.astype(np.float32))
     fz = np.ascontiguousarray(fz.astype(np.float32))
 
-    N, D = fx.shape
+    N, D = fx.shape if D is None else (fx.shape[0], D)
     out = np.zeros((D, D, D), dtype=np.float32)
 
     d_fx = cuda.to_device(fx)
@@ -43,14 +43,3 @@ def mean_estimation(fx, fy, fz):
     cuda.synchronize()
 
     return d_out.copy_to_host()
-
-if __name__ == "__main__":
-    N, D = 8, 4
-    fx = np.random.rand(N, D).astype(np.float32)
-    fy = np.random.rand(N, D).astype(np.float32)
-    fz = np.random.rand(N, D).astype(np.float32)
-
-    out = mean_estimation(fx, fy, fz)
-
-    ref = np.einsum('ni,nj,nk->ijk', fx, fy, fz) / N
-    print("Max abs error:", np.max(np.abs(out - ref)))
