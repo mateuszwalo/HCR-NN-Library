@@ -50,6 +50,12 @@ jupyter notebook example_implementation/01_hcrnn_end_to_end.ipynb
 
 This notebook demonstrates loading data, normalization, training HCRCond2D, and visualizing 𝐸[𝑢1∣𝑢2]E[u1∣u2].
 
+## Updates
+
+### 30 XII 25'
+
+Optimized core code functions by implementing by implementing mixed Just-in-Time Compilation for small scale computations and CUDA kernels for big scale calculations. The implementations are prototyped in dedicated CU format and implemented into code using Python Numba interface. Why specifically Numba and not C? We decided to follow Numba approach to facilitate the process of integrating GPU-based code and experimenting of science team along with existing memory management solution. Full mathematical implementation with explanation and benchmarking is shown in the [short pdf paper](/HCR-NN-Library/docs/Optimizing%20HCR%20functions.pdf).
+
 ## Documentation
 
 Getting started & API reference: see docs/guide.md.
