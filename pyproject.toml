@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hcr_nn"
+version = "1.1.0"
+description = "Package implementing Hierarchical Correlation Reconstruction Methodologies"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    { name = "Quantum Ai Interns", email = "k.rochalski@student.uw.edu.pl" },
+]
+license = { text = "MIT" }
+
+dependencies = [
+    "numpy>=1.26.4",
+    "matplotlib>=3.10.1",
+    "scipy>=1.13.1",
+    "torch>=2.7.0",
+    "pandas>=2.3.0",
+]
+
+[project.scripts]
+hcr_nn_info = "hcr_nn.layers:hcr_nn_info"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hcr_nn*"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/hcr_nn"
+Repository = "https://github.com/yourusername/hcr_nn"
