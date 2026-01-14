@@ -220,3 +220,11 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .Rproj.user
+
+#cuda ignores
+*.i
+*.ii
+*.gpu
+*.ptx
+*.cubin
+*.fatbin

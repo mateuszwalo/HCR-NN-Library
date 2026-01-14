@@ -224,7 +224,6 @@ def approximate_entropy(activations):
     entropy_out = d_entropy.copy_to_host()
     return float(np.mean(entropy_out))
 
-
 def approximate_mi(actX, actY):
 
     if isinstance(actX, torch.Tensor):

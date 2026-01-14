@@ -1,6 +1,8 @@
+#define MYCUDA_EXPORTS
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <vector>
+#include "cuda_header.h"
 
 // CUDA kernel: each thread computes one element A[i,j,k]
 __global__ void mean_estimation_kernel(
@@ -31,4 +33,20 @@ __global__ void mean_estimation_kernel(
     
     // normalize by number of triplets
     out[idx] = sum / N;
+}
+
+extern "C" void launch_mean_estimation_kernel(
+    const float*  fx,
+    const float*  fy,
+    const float*  fz,
+    float*  out,
+    int D,
+    int N
+){
+    int total = D * D * D;
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+
+    mean_estimation_kernel<<<blocks, threads>>>(fx, fy, fz, out, D, N);
+    cudaDeviceSynchronize();
 }

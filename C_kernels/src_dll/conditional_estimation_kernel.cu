@@ -1,5 +1,8 @@
-#include <cuda.h>
+#define MYCUDA_EXPORTS
 #include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+#include <stdio.h>
+#include "cuda_header.h"
 
 // Kernel to compute denominator (i=0 slice)
 __global__ void denominator_kernel(
@@ -49,4 +52,30 @@ __global__ void context_kernel(
         }
         context[i] = sum;
     }
+}
+
+extern "C" void launch_context_kernel(
+    const float* a,
+    const float* fy,
+    const float* fz,
+    float* context,
+    int D
+) {
+    dim3 threads(D, D);
+    dim3 blocks(D);
+    context_kernel<<<blocks, threads>>>(a, fy, fz, context, D);
+    cudaDeviceSynchronize();
+}
+
+extern "C" void launch_denominator_kernel(
+    const float* a,
+    const float* fy,
+    const float* fz,
+    float* denom,
+    int D
+) {
+    dim3 threads(16, 16);
+    dim3 blocks((D + 15)/16, (D + 15)/16);
+    denominator_kernel<<<blocks, threads>>>(a, fy, fz, denom, D);
+    cudaDeviceSynchronize();
 }

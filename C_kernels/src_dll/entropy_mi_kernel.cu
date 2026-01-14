@@ -1,5 +1,8 @@
-#include <cuda.h>
+#define MYCUDA_EXPORTS
+#include "cuda_header.h"
 #include <cuda_runtime.h>
+#include <device_launch_parameters.h>
+#include <math.h>
 
 // Entropy kernel: compute -mean(sum(p^2))
 __global__ void entropy_kernel(
@@ -63,4 +66,27 @@ __global__ void mi_kernel(
     }
 
     mi_out[b] = sum_sq_x * sum_sq_y;
+}
+
+extern "C" void launch_entropy_kernel(
+    const float* activations,
+    float* entropy_out,
+    int B, int D
+) {
+    dim3 blocks(B);
+    dim3 threads(1);
+    entropy_kernel<<<blocks, threads>>>(activations, entropy_out, B, D);
+    cudaDeviceSynchronize();
+}
+
+extern "C" void launch_mi_kernel(
+    const float* actX,
+    const float* actY,
+    float* mi_out,
+    int B, int D
+) {
+    dim3 blocks(B);
+    dim3 threads(1);
+    mi_kernel<<<blocks, threads>>>(actX, actY, mi_out, B, D);
+    cudaDeviceSynchronize();
 }
