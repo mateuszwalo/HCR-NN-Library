@@ -1,16 +1,38 @@
 @echo off
 setlocal
 set CUDA_PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0
-:: the code compiles the kernels into dynamic dll library
-echo Building mycuda.dll...
-"%CUDA_PATH%\bin\nvcc.exe" -Xcompiler="/LD" conditional_estimation_kernel.cu base_optimization_kernel.cu dynamic_ema_kernel.cu entropy_mi_kernel.cu mean_estimation_kernel.cu propagation_estimation_kernel.cu -o hcr_kernels.dll
+
+set SRC_DIR=%cd%
+set OUT_DIR=%cd%\build\pycuda
+if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
+
+echo.
+echo ==========================================
+echo Building hcr_kernels.dll for RTX 5080...
+echo Architecture: sm_120 (Blackwell)
+echo CUDA Path: %CUDA_PATH%
+echo Output: %OUT_DIR%\hcr_kernels.dll
+echo ==========================================
+
+"%CUDA_PATH%\bin\nvcc.exe" ^
+ -arch=sm_120 ^
+ -Xcompiler="/LD" ^
+ "%SRC_DIR%\conditional_estimation_kernel.cu" ^
+ "%SRC_DIR%\base_optimization_kernel.cu" ^
+ "%SRC_DIR%\dynamic_ema_kernel.cu" ^
+ "%SRC_DIR%\entropy_mi_kernel.cu" ^
+ "%SRC_DIR%\mean_estimation_kernel.cu" ^
+ "%SRC_DIR%\propagation_estimation_kernel.cu" ^
+ -o "%OUT_DIR%\hcr_kernels.dll"
 
 if %errorlevel% neq 0 (
-    echo Build failed!
+    echo.
+    echo Build failed! Check CUDA 13.0 installation and include paths.
     pause
     exit /b 1
 )
 
-echo Done: hcr_kernels.dll built successfully!
+echo.
+echo Done! hcr_kernels.dll built successfully.
 pause
 endlocal

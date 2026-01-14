@@ -4,7 +4,6 @@
 #include <vector>
 #include "cuda_header.h"
 
-// CUDA kernel: each thread computes one element A[i,j,k]
 __global__ void mean_estimation_kernel(
     const float* __restrict__ fx,
     const float* __restrict__ fy,

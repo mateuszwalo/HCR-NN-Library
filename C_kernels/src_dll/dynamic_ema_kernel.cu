@@ -3,7 +3,6 @@
 #include <cuda_runtime.h>
 #include "cuda_header.h"
 
-// EMA kernel: update each a[i,j,k]
 __global__ void ema_update_kernel(
     const float* __restrict__ x,
     const float* __restrict__ y,

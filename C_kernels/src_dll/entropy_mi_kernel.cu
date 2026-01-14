@@ -4,7 +4,6 @@
 #include <device_launch_parameters.h>
 #include <math.h>
 
-// Entropy kernel: compute -mean(sum(p^2))
 __global__ void entropy_kernel(
     const float* __restrict__ activations, // (B, D)
     float* __restrict__ entropy_out,
@@ -34,7 +33,6 @@ __global__ void entropy_kernel(
     entropy_out[b] = -sum_sq;
 }
 
-// Mutual information kernel: avoids outer product
 __global__ void mi_kernel(
     const float* __restrict__ actX, // (B, D)
     const float* __restrict__ actY, // (B, D)

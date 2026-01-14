@@ -3,8 +3,6 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 
-// Kernel for new_a = einsum('li, ljk -> ijk', U^T, a)
-// U: [D, D], a: [D, D, D], new_a: [D, D, D]
 __global__ void transform_tensor_kernel(
     const float* __restrict__ U,
     const float* __restrict__ a,
