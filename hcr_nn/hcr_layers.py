@@ -7,7 +7,7 @@ from torch import Tensor
 import time
 import layers_kernel
 from typing import Any, Callable, List, Tuple, Literal, Optional
-
+import numba
 
 #Nowsza wersja optymalizacji funkcji składowych HCR.
 #Częściowo testowana i gotowa do użytku w pewnym zakresie.
@@ -36,6 +36,7 @@ __all__ = ['CDFNorm',
 import torch
 from torch import nn
 
+#Layers
 class CDFNorm(nn.Module):
     # Using Literal for restricted string options improves IDE autocomplete
     method: Literal['gaussian', 'empirical']
@@ -123,62 +124,33 @@ class CDFNorm(nn.Module):
             return self._empirical_transform(x)
         raise ValueError(f"Unsupported normalization method: {self.method}")
     
-class MeanEstimation(nn.Module):
-    # Defining attributes for clarity and static analysis
-    triplets: List[Tuple[Any, Any, Any]]
-    feature_fn: Callable[[Any], Tensor]
-    feature_dm: int
-
-    def __init__(
-        self,
-        *,
-        triplets: List[Tuple[Any, Any, Any]],
-        feature_fn: Callable[[Any], Tensor],
-        feature_dm: int
-    ) -> None:
+class MeanEstimationBaseline(nn.Module):
+    """
+    Learnable third-order moment estimator:
+        A = E[ f(x) ⊗ f(y) ⊗ f(z) ]
+    """
+    def __init__(self, *, feature_fn, feature_dim):
         super().__init__()
-        self.triplets = triplets
         self.feature_fn = feature_fn
-        self.feature_dm = feature_dm
+        self.feature_dim = feature_dim
 
-    def forward(self) -> Tensor:
+    def forward(self, x, y, z):
         """
-        Calculates the mean estimation using a custom CUDA kernel.
-        
-        Returns:
-            Tensor: The result from the layers_kernel.mean_estimation.
+        x, y, z: tensors [B, input_dim]
+        returns: A [D, D, D]
         """
-        N: int = len(self.triplets)
-        D: int = self.feature_dm
+        fx = self.feature_fn(x)   # [B, D]
+        fy = self.feature_fn(y)   # [B, D]
+        fz = self.feature_fn(z)   # [B, D]
 
-        device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # outer products for each batch
+        # [B, D, D, D]
+        outer = torch.einsum('bi,bj,bk->bijk', fx, fy, fz)
 
-        # Precompute features
-        fx_list: List[Tensor] = []
-        fy_list: List[Tensor] = []
-        fz_list: List[Tensor] = []
-        
-        for (x, y, z) in self.triplets:
-            fx_list.append(self.feature_fn(x))
-            fy_list.append(self.feature_fn(y))
-            fz_list.append(self.feature_fn(z))
+        # mean over batch
+        A = outer.mean(dim=0)
 
-        # Stack and move to device
-        fx: Tensor = torch.stack(fx_list).to(device)
-        fy: Tensor = torch.stack(fy_list).to(device)
-        fz: Tensor = torch.stack(fz_list).to(device)
-
-        # Run CUDA kernel
-        # Note: detach().cpu().numpy() converts to a NumPy array, 
-        # so 'a' type depends on what the kernel returns (likely a Tensor or Array)
-        result_array: Any = layers_kernel.mean_estimation(
-            fx.detach().cpu().numpy(),
-            fy.detach().cpu().numpy(),
-            fz.detach().cpu().numpy()
-        )
-        
-        # Ensure the return type matches the expected Tensor hint
-        return torch.as_tensor(result_array)
+        return A
  
 class ConditionalEstimation(nn.Module):
     # Attribute type hints for class properties
@@ -207,9 +179,6 @@ class ConditionalEstimation(nn.Module):
     def forward(self) -> List[Tensor]:
         """
         Computes conditional scores for candidate inputs.
-        
-        Returns:
-            List[Tensor]: A list of dot-product scores for each candidate in x_candidates.
         """
         target_dtype: torch.dtype = self.a.dtype
         target_device: torch.device = self.a.device
@@ -247,92 +216,73 @@ class ConditionalEstimation(nn.Module):
         return scores
     
 class PropagationEstimation(nn.Module):
-    # Class attribute annotations
-    y: Any
-    z: Any
-    a: Tensor
-    feature_fn: Callable[[Any], Tensor]
-
-    def __init__(
-        self,
-        *,
-        y: Any,
-        z: Any,
-        a: Tensor,
-        feature_fn: Callable[[Any], Tensor]
-    ) -> None:
+    """
+    estimate Propagation of Tensor.
+    """
+    def __init__(self,
+                 *,
+                 y,
+                 z,
+                 a,
+                 feature_fn):
         super().__init__()
         self.y = y
         self.z = z
         self.a = a
         self.feature_fn = feature_fn
 
-    def forward(self) -> Tensor:
-        """
-        Computes propagated expectation ratio using custom kernel operations.
-        
-        Returns:
-            Tensor: The normalized propagation estimation result.
-        """
-        target_dtype: torch.dtype = self.a.dtype
-        target_device: torch.device = self.a.device
+    def forward(self):
+        # dopasowanie dtype/device do tensora a
+        target_dtype = self.a.dtype
+        target_device = self.a.device
 
-        # Map inputs to features and ensure they match 'a' in dtype and device
-        fy: Tensor = self.feature_fn(self.y).to(dtype=target_dtype, device=target_device).view(-1)
-        fz: Tensor = self.feature_fn(self.z).to(dtype=target_dtype, device=target_device).view(-1)
+        fy = self.feature_fn(self.y).to(dtype=target_dtype, device=target_device).view(-1)
+        fz = self.feature_fn(self.z).to(dtype=target_dtype, device=target_device).view(-1)
 
-        # Execution of custom CUDA kernels
-        # Using .contiguous() is crucial for stable C++ extension performance
-        numerator: Tensor = layers_kernel.propagate_expectation(self.a[1].contiguous(), fy, fz)
-        denominator: Tensor = layers_kernel.propagate_expectation(self.a[0].contiguous(), fy, fz)
+        numerator = torch.einsum('jk,j,k->', self.a[1], fy, fz)
+        denominator = torch.einsum('jk,j,k->', self.a[0], fy, fz)
 
-        # Numerical stability handling for ratio calculation
-        ratio: Tensor = numerator / (denominator + 1e-8)
+        ratio = numerator / (denominator + 1e-8)
 
-        # Normalization and transformation logic
-        centered_ratio: Tensor = ratio - 1.0
-        const: Tensor = torch.sqrt(torch.tensor(3.0, dtype=target_dtype, device=target_device))
-        propagated: Tensor = 0.5 + (1.0 / (2.0 * const)) * centered_ratio
+        # przesunięcie bazy
+        centered_ratio = ratio - 1.0
+
+        const = torch.sqrt(torch.tensor(3.0, dtype=ratio.dtype, device=ratio.device))
+        propagated = 0.5 + (1.0 / (2.0 * const)) * centered_ratio
 
         return propagated
     
 class EntropyAndMutualInformation(nn.Module):
-    def __init__(self) -> None:
+    """
+    Calcuate entropy and/or mutual information. 
+    Two methods are specifically set in the same class.
+    """
+    def __init__(self, compute_mi=False):
         super().__init__()
+        self.compute_mi = compute_mi
 
-    def approximate_entropy(self, activations: Tensor) -> Tensor:
-        """
-        Calculates the approximate Shannon entropy of the given activations.
-        
-        Args:
-            activations: Input tensor of shape (batch_size, num_classes).
-            
-        Returns:
-            Tensor: A scalar tensor representing the mean entropy.
-        """
-        probs: Tensor = F.softmax(activations, dim=-1)
-        log_probs: Tensor = torch.log(probs + 1e-8)
-        # Sum over classes, mean over batch
-        entropy: Tensor = -(probs * log_probs).sum(dim=-1).mean()
+    def approximate_entropy(self, activations):
+
+        # Normalizacja prawdopodobieństw funkcji aktywacji
+        probs = F.softmax(activations, dim=1)
+        entropy = -torch.sum(probs ** 2, dim=1).mean()
         return entropy
 
-    def approximate_mutual_information(self, act_X: Tensor, act_Y: Tensor) -> Tensor:
-        """
-        Calculates the mutual information between two sets of activations using a CUDA kernel.
-        
-        Args:
-            act_X: Activations for variable X.
-            act_Y: Activations for variable Y.
-            
-        Returns:
-            Tensor: The calculated mutual information.
-        """
-        probs_X: Tensor = F.softmax(act_X, dim=1)
-        probs_Y: Tensor = F.softmax(act_Y, dim=1)
+    def approximate_mutual_information(self, act_X, act_Y):
+        # Normalizacja funkcji aktywacji
+        probs_X = F.softmax(act_X, dim=1)
+        probs_Y = F.softmax(act_Y, dim=1)
+
+        joint_probs = torch.bmm(probs_X.unsqueeze(2), probs_Y.unsqueeze(1))
+        mi = torch.sum(joint_probs ** 2, dim=(1,2)).mean()
+        return mi
     
-        # Ensure the CUDA kernel receives the probability tensors
-        return layers_kernel.approximate_mi_cu(probs_X, probs_Y)
-    
+    def forward(self, x, y=None):
+        if self.compute_mi and y is not None:
+            return self.approximate_mutual_information(x, y)
+        else:
+            return self.approximate_entropy(x)
+
 class DynamicEMA(nn.Module):
     def __init__(self, ema_lambda: float = 0.9):
         super().__init__()
@@ -347,6 +297,9 @@ class DynamicEMA(nn.Module):
                       (1 - self.ema_lambda) * x.detach())
         return self.a
 
+#Optimizer
+
+#Loss Function
 class InformationBottleneckLoss(nn.Module):
     """
     Information Bottleneck criterion for neural networks.
