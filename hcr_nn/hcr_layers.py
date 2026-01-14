@@ -9,8 +9,8 @@ import layers_kernel
 from typing import Any, Callable, List, Tuple, Literal, Optional
 
 
-#Wczesna wersja optymalizacji funkcji składowych HCR.
-#Nietestowana i niegotowa do użytku.
+#Nowsza wersja optymalizacji funkcji składowych HCR.
+#Częściowo testowana i gotowa do użytku w pewnym zakresie.
 
 def timer(func):
     def wrapper(*args, **kwargs):
@@ -334,19 +334,18 @@ class EntropyAndMutualInformation(nn.Module):
         return layers_kernel.approximate_mi_cu(probs_X, probs_Y)
     
 class DynamicEMA(nn.Module):
-    def __init__(self, ema_lambda: float):
+    def __init__(self, ema_lambda: float = 0.9):
         super().__init__()
         self.ema_lambda = ema_lambda
-        self.register_buffer("a", torch.zeros(1))  
+        self.register_buffer("a", torch.zeros(1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.a.numel() == 1:
-            self.a = x.clone()
+            self.a = x.detach().clone()
         else:
-            self.a = self.ema_lambda * self.a + (1 - self.ema_lambda) * x
-
+            self.a = (self.ema_lambda * self.a.detach() +
+                      (1 - self.ema_lambda) * x.detach())
         return self.a
-
 
 class InformationBottleneckLoss(nn.Module):
     """
