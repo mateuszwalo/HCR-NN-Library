@@ -21,13 +21,6 @@ def timer(func):
         return result
     return wrapper
 
-'''
-@timer
-def printer():
-    for x in 10000:
-        print('hello world')
-'''
-
 #Default imports of HCRNN Components.
 #Make sure that __init__.py file is correctly opening layers
 
@@ -38,7 +31,10 @@ __all__ = ['CDFNorm',
            'EntropyAndMutualInformation', 
            'DynamicEMA', 
            'BaseOptimization', 
-           'InformationBottleneck']
+           'InformationBottleneckLoss']
+
+import torch
+from torch import nn
 
 class CDFNorm(nn.Module):
     # Using Literal for restricted string options improves IDE autocomplete
@@ -338,241 +334,54 @@ class EntropyAndMutualInformation(nn.Module):
         return layers_kernel.approximate_mi_cu(probs_X, probs_Y)
     
 class DynamicEMA(nn.Module):
-    # Attribute annotations for class state
-    x: Tensor
-    y: Tensor
-    z: Tensor
-    ema_lambda: float
-    a: Tensor
-
-    def __init__(
-        self, 
-        x: Tensor, 
-        y: Tensor, 
-        z: Tensor, 
-        ema_lambda: float
-    ) -> None:
+    def __init__(self, ema_lambda: float):
         super().__init__()
-        self.x = x
-        self.y = y
-        self.z = z
         self.ema_lambda = ema_lambda
-        
-        # Initialize buffer 'a' matching device and dtype of input tensors
-        self.a = torch.zeros(
-            (len(x), len(y), len(z)), 
-            device=x.device, 
-            dtype=x.dtype
-        )
-
-    def forward(self) -> Tensor:
-        """
-        Performs an Exponential Moving Average (EMA) update using a custom CUDA kernel.
-        
-        Returns:
-            Tensor: The updated internal state 'a'.
-        """
-        # Convert tensors to NumPy for kernel compatibility
-        # In 2026, explicit typing of intermediate arrays aids static analysis
-        a_np: np.ndarray = self.a.detach().cpu().numpy()
-        x_np: np.ndarray = self.x.detach().cpu().numpy()
-        y_np: np.ndarray = self.y.detach().cpu().numpy()
-        z_np: np.ndarray = self.z.detach().cpu().numpy()
-
-        # Execute the update kernel
-        # Casting ema_lambda to float ensures compatibility with C++ float/double signatures
-        updated: np.ndarray = layers_kernel.ema_update(
-            a_np, x_np, y_np, z_np, float(self.ema_lambda)
-        )
-        
-        # Synchronize updated values back to the original device/dtype
-        self.a = torch.as_tensor(updated, device=self.x.device, dtype=self.x.dtype)
-        
-        return self.a
-
-'''
-class EMAOptimizedLinear(nn.Module):
-    def __init__(self, in_features: int, out_features: int, ema_params: dict):
-        super().__init__()
-        # Standard learnable layer
-        self.linear = nn.Linear(in_features, out_features)
-        
-        # DynamicEMA setup (expects x, y, z tensors for its 3D 'a' buffer)
-        self.ema_layer = DynamicEMA(
-            x=ema_params['x'], 
-            y=ema_params['y'], 
-            z=ema_params['z'], 
-            ema_lambda=ema_params['lambda']
-        )
-
-    def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
-        # 1. Standard forward pass (gradients are tracked here)
-        linear_out = self.linear(input_tensor)
-        
-        # 2. Update EMA state
-        # In your current code, DynamicEMA.forward() is parameterless 
-        # and updates internal 'a'. You call it to trigger the CUDA kernel.
-        updated_ema_a = self.ema_layer()
-        
-        # 3. Combine results
-        # Example: using the EMA 'a' to scale or shift the linear output
-        # Ensure dimensions match (linear_out might need reshaping)
-        return linear_out + updated_ema_a.mean()
-'''
-
-class BaseOptimization(nn.Module):
-    # Annotate class attributes for static analysis
-    a: Tensor
-
-    def __init__(self, *, a: Tensor) -> None:
-        super().__init__()
-        self.a = a
-
-    def forward(self) -> Tensor:
-        """
-        Optimizes the tensor 'a' using SVD and a custom kernel transformation.
-        
-        Returns:
-            Tensor: The transformed tensor, reconstructed on the original device.
-        """
-        # Reshape to 2D for SVD; M has shape (first_dim, combined_rest_dims)
-        M: Tensor = self.a.reshape(len(self.a[0]), -1)
-        
-        # Perform Singular Value Decomposition
-        # U, S, Vh shapes are determined by M
-        U: Tensor
-        S: Tensor
-        Vh: Tensor
-        U, S, Vh = torch.linalg.svd(M, full_matrices=False)
-
-        # Prepare data for CUDA/C++ kernel
-        # We use .T (transpose) and .contiguous() to ensure memory layout matches C++ expectations
-        u_np: np.ndarray = U.T.contiguous().cpu().numpy()
-        a_np: np.ndarray = self.a.cpu().numpy()
-
-        # Run the custom transformation
-        new_a_np: np.ndarray = layers_kernel.transform_tensor(u_np, a_np)
-
-        # Convert back to torch.Tensor while preserving original hardware context
-        return torch.as_tensor(new_a_np, dtype=self.a.dtype, device=self.a.device)
-
-''' 
-class BOModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, a_tensor):
-        super().__init__()
-        # Standard PyTorch Layer
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        # Your Custom Component
-        self.optimizer_layer = BaseOptimization(a=a_tensor)
-        # Another Standard Layer
-        self.fc2 = nn.Linear(hidden_dim, 10)
+        self.register_buffer("a", torch.zeros(1))  
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # 1. Pass through standard linear layer
-        x = self.fc1(x)
-        # 2. Run your custom optimization (SVD + C++ Kernel)
-        # Note: BaseOptimization currently ignores input and uses internal self.a
-        optimized_a = self.optimizer_layer() 
-        # 3. Use the result in downstream operations
-        return self.fc2(x + optimized_a.mean()) 
-'''
+        if self.a.numel() == 1:
+            self.a = x.clone()
+        else:
+            self.a = self.ema_lambda * self.a + (1 - self.ema_lambda) * x
 
-class InformationBottleneck(nn.Module):
-    # hyperparameters
-    beta: float
+        return self.a
 
-    def __init__(self, beta: float = 1.0) -> None:
+
+class InformationBottleneckLoss(nn.Module):
+    """
+    Information Bottleneck criterion for neural networks.
+    
+    Computes:
+        L_IB = I(X; T) - β * I(T; Y)
+    where I(·;·) is estimated using a Hilbert-Schmidt Independence Criterion (HSIC) approximation:
+        HSIC(X, Y) ≈ ||XᵀY||_F²
+    """
+    def __init__(self, beta: float = 1.0, normalize: bool = True) -> None:
         super().__init__()
         self.beta = beta
+        self.normalize = normalize
 
-    def forward(self, X_features: Tensor, Y_features: Tensor) -> Tensor:
+    def _hsic(self, X: Tensor, Y: Tensor) -> Tensor:
         """
-        Calculates the Hilbert-Schmidt Independence Criterion (HSIC) or similar 
-        trace-based dependency measure (Equation 15).
-        
-        Optimized via the identity Tr((XXᵀ)(YYᵀ)) = ||XᵀY||²_F.
-        
-        Args:
-            X_features: Tensor of shape (batch_size, d_x)
-            Y_features: Tensor of shape (batch_size, d_y)
-            
-        Returns:
-            Tensor: A scalar representing the statistical dependency.
+        Compute a differentiable Hilbert-Schmidt Independence Criterion (HSIC) approximation.
+        Tr((XXᵀ)(YYᵀ)) = ||XᵀY||_F²
         """
-        # Feature normalization across the last dimension
-        X_norm: Tensor = F.normalize(X_features, dim=-1)
-        Y_norm: Tensor = F.normalize(Y_features, dim=-1)
+        if self.normalize:
+            X = F.normalize(X, dim=-1)
+            Y = F.normalize(Y, dim=-1)
 
-        # Compute the Frobenius norm squared of the cross-covariance matrix
-        # This efficiently implements the trace of the product of gram matrices
-        XY: Tensor = torch.matmul(X_norm.T, Y_norm)
-        return torch.sum(XY.pow(2))
+        cross = torch.matmul(X.T, Y)
+        hsic_value = torch.sum(cross.pow(2))
+        return hsic_value / X.size(0)
 
-    def bottleneck_loss(
-        self, 
-        X_features: Tensor, 
-        T_features: Tensor, 
-        Y_features: Tensor
-    ) -> Tensor:
+    def forward(self, X: Tensor, T: Tensor, Y: Tensor) -> Tensor:
         """
-        Calculates the Information Bottleneck loss (Equation 10).
-        
-        L = I(X; T) - β * I(T; Y)
-        
-        Args:
-            X_features: Input features.
-            T_features: Compressed representation (bottleneck).
-            Y_features: Target features (labels/signals).
-            
-        Returns:
-            Tensor: The total IB loss.
+        Compute the Information Bottleneck loss:
+        L = I(X;T) - β * I(T;Y)
         """
-        I_XT: Tensor = self.forward(X_features, T_features)
-        I_TY: Tensor = self.forward(T_features, Y_features)
-        
-        return I_XT - self.beta * I_TY
-    
-'''
-Infomration Bottleneck example usage
-class IBClassifier(nn.Module):
-    def __init__(self, input_dim: int, bottleneck_dim: int, num_classes: int, beta: float):
-        super().__init__()
-        self.encoder = nn.Linear(input_dim, bottleneck_dim)
-        self.classifier = nn.Linear(bottleneck_dim, num_classes)
-        self.ib_layer = InformationBottleneck(beta=beta)
-
-    def forward(self, x: Tensor):
-        t = self.encoder(x)
-        logits = self.classifier(t)
-        return logits, t
-
-# --- Small Training Simulation ---
-# 1. Setup
-input_dim, latent_dim, num_classes = 128, 64, 5
-model = IBClassifier(input_dim, latent_dim, num_classes, beta=0.1)
-ce_loss_fn = nn.CrossEntropyLoss()
-
-# 2. Mock Data
-X = torch.randn(3, input_dim, requires_grad=True)
-target_labels = torch.empty(3, dtype=torch.long).random_(num_classes)
-# For IB, we need Y features (often one-hot labels in practice)
-Y_features = F.one_hot(target_labels, num_classes=num_classes).float()
-
-# 3. Forward Pass
-logits, T = model(X)
-
-# 4. Combined Loss Calculation
-ce_loss = ce_loss_fn(logits, target_labels)
-ib_loss = model.ib_layer.bottleneck_loss(X, T, Y_features)
-total_loss = ce_loss + ib_loss
-
-# 5. Output like your example
-print(f"CrossEntropy: {ce_loss.item():.4f}")
-print(f"IB Component: {ib_loss.item():.4f}")
-print(f"Total Combined Loss: {total_loss.item():.4f}")
-
-total_loss.backward()
-
-# Verify gradients exist
-print(f"Encoder Gradient Check: {model.encoder.weight.grad is not None}")
-'''
+        I_XT = self._hsic(X, T)
+        I_TY = self._hsic(T, Y)
+        loss = I_XT - self.beta * I_TY
+        return loss
+ 
